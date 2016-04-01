@@ -4,7 +4,7 @@ import numpy
 import scipy.signal
 
 
-def record(channels, format, rate, seconds, plot=False):
+def record(channels, format, rate, seconds, plot=False, update_text_callback=None):
 
     import pyaudio
     import wave
@@ -24,7 +24,10 @@ def record(channels, format, rate, seconds, plot=False):
                     input=True,
                     frames_per_buffer=CHUNK)
 
-    print("* recording")
+    if update_text_callback is not None:
+        update_text_callback("Recording")
+    else:
+        print("* recording")
 
     frames = []
 
@@ -32,7 +35,10 @@ def record(channels, format, rate, seconds, plot=False):
         data = stream.read(CHUNK)
         frames.append(data)
 
-    print("* done recording")
+    if update_text_callback is not None:
+        update_text_callback("Filtering")
+    else:
+        print("* done recording")
 
     stream.stop_stream()
     stream.close()
@@ -51,8 +57,6 @@ def record(channels, format, rate, seconds, plot=False):
     filtered = filtered[new_start : new_end]
     decoded = decoded[new_start : new_end]
 
-    filtered_str = filtered.tostring()
-
     x = list(range(0, decoded.size))
 
     if (plot):
@@ -65,7 +69,7 @@ def record(channels, format, rate, seconds, plot=False):
 
         plt.show()
 
-    return filtered_str
+    return filtered
 
 def butter_bandpass(lowcut, highcut, fs, order=5):
     nyq = 0.5 * fs
@@ -123,9 +127,11 @@ def get_formants(data, rate):
     angz = numpy.arctan2(numpy.imag(rts), numpy.real(rts))
 
     # Get frequencies.
-    frqs = sorted(angz * (rate / (2 * math.pi)))
+    frqs = angz * (rate / (2 * math.pi))
+    frqs = [f for f in frqs if f != 0]
+    frqs_sorted = sorted(frqs)
 
-    return frqs 
+    return frqs_sorted
 
 def find_silence_end(data, threshold=1000, forwards=True):
 
@@ -148,7 +154,7 @@ def find_silence_end(data, threshold=1000, forwards=True):
                 index = len(abs_signal) - i
             return index
 
-    return data
+    return len(abs_signal) - 1
 
 def find_extrema(data, maximum=True):
 
@@ -171,4 +177,6 @@ if __name__ == "__main__":
 
     audio = record(CHANNELS, FORMAT, RATE, SECONDS, plot=True)
 
-    save_wave(audio, WAVE_OUTPUT_FILENAME, CHANNELS, p.get_sample_size(FORMAT), RATE)
+    audio_str = audio.tostring()
+
+    save_wave(audio_str, WAVE_OUTPUT_FILENAME, CHANNELS, p.get_sample_size(FORMAT), RATE)
