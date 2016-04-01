@@ -56,7 +56,7 @@ class App:
         # for each word in dictionary, call __get_word_model__
         self.model = {}
         for word in App.VOCABULARY:
-            self.model[word] = self.__get_word_model__(word)
+            self.model[word] = self.__get_formant_model__(word)
             print(self.model[word])
 
         self.record.config(state=NORMAL)
@@ -102,7 +102,7 @@ class App:
         self.recordtext.set(text)
         self.recording.update()
 
-    def __get_word_model__(self, word, num_formants=5):
+    def __get_word_model__(self, word):
 
         print("initializing model for word {:s}".format(word))
 
@@ -112,6 +112,20 @@ class App:
             if fnmatch.fnmatch(file, word + '*.wav'):
                 dat, rate = record.load_file(word + '\\' + file)
                 files.append(dat)
+
+        model = {}
+
+        # get formants
+        model['formants'] = self.__get_formant_model__(files)
+
+        # get length in seconds
+        model['length'] = self.__get_length_model__(files)
+
+        # get # zero crossings
+
+
+
+    def __get_formant_model__(self, files, num_formants=5):
 
         # compute formants for each of them
         formants = []
@@ -130,6 +144,37 @@ class App:
 
         # return this as a model
         return form_ave
+
+    def __get_length_model__(self, files):
+
+        lengths = [(len(f) / App.RATE) for f in files]
+
+        # get median file length in seconds
+        med = numpy.median(lengths)
+        return med
+
+    def __get_zero_crossings__(self, files):
+
+        # get # crossings for each file
+        crossings = []
+        for data in files:
+
+            count = 0
+            prev_val = None
+            for datum in data:
+                if prev_val is None:
+                    prev_val = datum
+                    continue
+                if datum == 0:
+                    continue
+                else if prev_val ^ datum < 0:
+                    count += 1
+
+                prev_val = datum
+
+
+
+
 
 root = Tk()
 
