@@ -90,7 +90,7 @@ class App:
             formant = formant[0:mi]
             model = model[0:mi]
 
-            ave_std = numpy.mean(numpy.std((formant, model), axis=0))
+            ave_std = numpy.mean(numpy.abs(numpy.diff((formant, model), axis=0)))
             if min_std > ave_std:
                 min_std = ave_std
                 min_word = word
