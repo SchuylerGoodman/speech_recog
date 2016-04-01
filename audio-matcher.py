@@ -27,7 +27,8 @@ class App:
         'backup',
         'list'
     ]
-    FORMANTS_KEY = 'formants'
+    PRE_FORMANTS_KEY = 'pre_formants'
+    POST_FORMANTS_KEY = 'post_formants'
     LENGTH_KEY = 'length'
     ZCROSSINGS_KEY = 'zero_crossings'
 
@@ -54,24 +55,25 @@ class App:
 
     def init_model(self):
 
-        self.recordtext.set("Initializing")
-        self.recording.update()
+        self.set_text("Initializing")
 
         # for each word in dictionary, call __get_model__
         self.model = {}
         for word in App.VOCABULARY:
 
-            print("initializing model for word {:s}".format(word))
+            #print("initializing model for word {:s}".format(word))
+            self.set_text("Initializing model for {:s}".format(word))
 
             # find files associated with word and load their data
             signals = []
             for file in os.listdir(word):
+
                 if fnmatch.fnmatch(file, word + '*.wav'):
                     dat, rate = record.load_file(word + '\\' + file)
                     signals.append(dat)
 
             self.model[word] = self.__get_model__(signals)
-            print(self.model[word])
+            #print(self.model[word])
 
         self.record.config(state=NORMAL)
         self.recordtext.set("")
@@ -95,11 +97,18 @@ class App:
 
         # compute model for signal
         input_model = self.__get_model__(signal)
-        print(input_model)
+        #print(input_model)
         #formant = numpy.array(record.get_formants(signal, App.RATE))
 
         # compare formants
-        form_weights = self.__compare_formants__(input_model[App.FORMANTS_KEY])
+        pre_form_weights = self.__compare_formants__(
+            input_model[App.PRE_FORMANTS_KEY],
+            App.PRE_FORMANTS_KEY
+        )
+        post_form_weights = self.__compare_formants__(
+            input_model[App.POST_FORMANTS_KEY],
+            App.POST_FORMANTS_KEY
+        )
 
         # compare lengths
         len_weights = self.__compare_lengths__(input_model[App.LENGTH_KEY])
@@ -110,11 +119,15 @@ class App:
         # sum weights together and pick item with most weight
         sums = {}
         for word in self.model:
-            sums[word] = form_weights[word] + len_weights[word] + zcross_weights[word]
+            sums[word] = pre_form_weights[word] + \
+                post_form_weights[word] + \
+                len_weights[word] + \
+                zcross_weights[word]
 
-        print('formants', form_weights)
-        print('length', len_weights)
-        print('zcrossings', zcross_weights)
+        #print('pre_formants', pre_form_weights)
+        #print('post_formants', post_form_weights)
+        #print('length', len_weights)
+        #print('zcrossings', zcross_weights)
 
         max_word = max(sums.items(), key=operator.itemgetter(1))[0]
         return max_word
@@ -128,7 +141,10 @@ class App:
         model = {}
 
         # get formants
-        model[App.FORMANTS_KEY] = self.__get_formant_model__(signals)
+        pre_signals = [signal[:int(len(signal) / 2)] for signal in signals]
+        post_signals = [signal[int(len(signal) / 2):] for signal in signals]
+        model[App.PRE_FORMANTS_KEY] = self.__get_formant_model__(pre_signals)
+        model[App.POST_FORMANTS_KEY] = self.__get_formant_model__(post_signals)
 
         # get length in seconds
         model[App.LENGTH_KEY] = self.__get_length_model__(signals)
@@ -177,20 +193,28 @@ class App:
         med_crossings = numpy.median(crossings)
         return med_crossings
 
-    def __compare_formants__(self, input_formants):
+    def __compare_formants__(self, input_formants, model_key):
 
         # get minimum formant length and scale so that we can match them
         # for each word in vocab, get average absolute difference of formants
         diffs = {}
-        print(input_formants[0:5])
+        #print(input_formants[0:5])
         for word, model in self.model.items():
-            model_formants = model[App.FORMANTS_KEY]
+            model_formants = model[model_key]
 
             mi = min(len(input_formants), len(model_formants))
             input_formants = input_formants[0:mi]
             model_formants = model_formants[0:mi]
 
-            diffs[word] = numpy.mean(numpy.abs(numpy.diff((input_formants, model_formants), axis=0)))
+            abs_diff = numpy.abs(numpy.diff((input_formants, model_formants), axis=0))[0]
+            mean = 0
+            for i in range(len(abs_diff)):
+                val = abs_diff[i]
+                # weight differences in higher formants less than in lower ones
+                mean += val / (i + 1)
+            mean /= len(abs_diff)
+            diffs[word] = mean
+            #diffs[word] = numpy.mean(numpy.abs(numpy.diff((input_formants, model_formants), axis=0)))
 
         weights = self.__reverse_normalize__(diffs)
         return weights
